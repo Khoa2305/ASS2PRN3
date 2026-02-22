@@ -1,6 +1,6 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using System.Text.Json;
-using UI.Apis;
+using FUNewsManagement_FE.Clients;
 using UI.dto.request;
 using UI.dto.response;
 
@@ -8,6 +8,13 @@ namespace UI.Controllers
 {
     public class AuthController : Controller
     {
+        private readonly ICoreApiClient _coreApi;
+
+        public AuthController(ICoreApiClient coreApi)
+        {
+            _coreApi = coreApi;
+        }
+
         [HttpGet]
         public IActionResult Index()
         {
@@ -17,12 +24,7 @@ namespace UI.Controllers
         [HttpPost]
         public async Task<IActionResult> Login([FromForm] LoginRequestDto requestDto)
         {
-            var response = await ApiHelper.RequestApi(
-                "http://localhost:5039/api/auth/login",
-                "POST",
-                requestDto,
-                HttpContext
-            );
+            var response = await _coreApi.SendAsync(HttpMethod.Post, "api/auth/login", requestDto);
 
             if (!response.IsSuccessStatusCode)
             {
@@ -47,15 +49,15 @@ namespace UI.Controllers
             }
 
             // ===== SET SESSION =====
-            HttpContext.Session.SetString(
-                "ACCESS_TOKEN",
-                apiResponse.Data.AccessToken
-            );
+            HttpContext.Session.SetString("ACCESS_TOKEN", apiResponse.Data.AccessToken);
+            
+            // Assuming LoginResponseDto has RefreshToken, we store it for the DelegatingHandler
+            if (!string.IsNullOrEmpty(apiResponse.Data.RefreshToken))
+            {
+                HttpContext.Session.SetString("REFRESH_TOKEN", apiResponse.Data.RefreshToken);
+            }
 
-            HttpContext.Session.SetInt32(
-                "ROLE",
-                apiResponse.Data.Role
-            );
+            HttpContext.Session.SetInt32("ROLE", apiResponse.Data.Role);
             // =======================
 
             return RedirectToAction("Index", "Home");

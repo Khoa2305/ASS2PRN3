@@ -1,4 +1,4 @@
-﻿namespace UI.Apis
+﻿namespace UI.dto.response
 {
     public class ApiResponse<T>
     {
