@@ -51,5 +51,23 @@ namespace FUNewsManagement_FE.Controllers
 
             return View(vm);
         }
+
+        [HttpGet]
+        public async Task<IActionResult> Export()
+        {
+            var role = HttpContext.Session.GetInt32("ROLE");
+            if (role != 1) return RedirectToAction("Index", "Home");
+
+            try
+            {
+                var fileBytes = await _analyticsClient.DownloadExcelAsync("api/analytics/export");
+                return File(fileBytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", $"AnalyticsReport_{DateTime.Now:yyyyMMdd_HHmmss}.xlsx");
+            }
+            catch (Exception ex)
+            {
+                TempData["Error"] = "Unable to export report: " + ex.Message;
+                return RedirectToAction(nameof(Index));
+            }
+        }
     }
 }
