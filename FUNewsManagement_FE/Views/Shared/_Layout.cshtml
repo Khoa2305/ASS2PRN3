@@ -1,4 +1,5 @@
 ﻿@using Microsoft.AspNetCore.Http
+@inject FUNewsManagement_FE.Services.IOfflineStateService OfflineState
 @{
     var accessToken = Context.Session.GetString("ACCESS_TOKEN");
     var isLoggedIn = !string.IsNullOrEmpty(accessToken);
@@ -144,7 +145,15 @@
     </aside>
 
     <!-- MAIN -->
-    <div class="flex-grow-1">
+    <div class="flex-grow-1 d-flex flex-column h-100">
+
+        @if (OfflineState.IsOffline)
+        {
+            <div class="alert alert-warning text-center rounded-0 mb-0 shadow-sm border-0 border-bottom border-warning" role="alert">
+                <i class="bi bi-wifi-off me-2 fw-bold text-danger"></i>
+                <strong>Offline Mode Active:</strong> Unable to connect to backend services. Viewing cached data only. Creating, updating, or deleting data is disabled.
+            </div>
+        }
 
         <!-- TOP BAR -->
         <div class="topbar glass d-flex justify-content-between align-items-center">

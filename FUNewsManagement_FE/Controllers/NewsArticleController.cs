@@ -16,6 +16,7 @@ namespace UI.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
+        [FUNewsManagement_FE.Filters.OfflineModeGuard]
         public async Task<IActionResult> Edit(
             NewsArticleResponseDto model,
             short CategoryId,
@@ -71,6 +72,7 @@ namespace UI.Controllers
         }
 
         [HttpPost]
+        [FUNewsManagement_FE.Filters.OfflineModeGuard]
         public async Task<IActionResult> Delete(string id)
         {
             var response = await _coreApi.SendAsync(HttpMethod.Delete, $"api/NewsArticles/{id}");
@@ -91,6 +93,7 @@ namespace UI.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
+        [FUNewsManagement_FE.Filters.OfflineModeGuard]
         public async Task<IActionResult> Create(NewsArticleRequestDto dto)
         {
             if (!ModelState.IsValid)

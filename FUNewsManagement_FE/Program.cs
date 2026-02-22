@@ -6,6 +6,10 @@ builder.Services.AddControllersWithViews();
 
 builder.Services.AddHttpContextAccessor();
 
+// Offline Mode & Background Worker
+builder.Services.AddSingleton<FUNewsManagement_FE.Services.IOfflineStateService, FUNewsManagement_FE.Services.OfflineStateService>();
+builder.Services.AddHostedService<FUNewsManagement_FE.Workers.DashboardSyncWorker>();
+
 builder.Services.AddSession(options =>
 {
     options.IdleTimeout = TimeSpan.FromMinutes(30);

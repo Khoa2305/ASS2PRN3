@@ -1,4 +1,5 @@
 @using Microsoft.AspNetCore.Http
+@inject FUNewsManagement_FE.Services.IOfflineStateService OfflineState
 @{
     ViewData["Title"] = "Report Statistics";
     var accessToken = Context.Session.GetString("ACCESS_TOKEN");
@@ -16,10 +17,10 @@
                 <span class="input-group-text">To</span>
                 <input type="date" id="endDate" class="form-control">
             </div>
-            <button class="btn btn-primary" onclick="loadReport()">
+            <button class="btn btn-primary" onclick="loadReport()" @(OfflineState.IsOffline ? "disabled" : "")>
                 <i class="bi bi-filter"></i> Generate Report
             </button>
-            <button class="btn btn-success" onclick="downloadExcel()">
+            <button class="btn btn-success" onclick="downloadExcel()" @(OfflineState.IsOffline ? "disabled" : "")>
                 <i class="bi bi-file-earmark-excel"></i> Export Excel
             </button>
         </div>
@@ -116,6 +117,17 @@
         });
 
         async function loadReport() {
+            if (@(OfflineState.IsOffline.ToString().ToLower())) {
+                const cachedData = @Html.Raw(OfflineState.CachedDashboard != null ? System.Text.Json.JsonSerializer.Serialize(OfflineState.CachedDashboard) : "null");
+                if (cachedData) {
+                    renderDashboardData(cachedData);
+                    showAlert('Showing cached Dashboard data from last successful fetch.', 'warning');
+                } else {
+                    showAlert('No cached data available.', 'danger');
+                }
+                return;
+            }
+
             const start = document.getElementById('startDate').value;
             const end = document.getElementById('endDate').value;
             
@@ -200,6 +212,35 @@
                     <tr>
                         <td>${item.key}</td>
                         <td class="text-end fw-bold">${item.count}</td>
+                    </tr>
+                `).join('');
+            } else {
+                authorBody.innerHTML = '<tr><td colspan="2" class="text-center">No data</td></tr>';
+            }
+        }
+
+        function renderDashboardData(data) {
+            document.getElementById('totalActive').innerText = data.PublishedArticles;
+            document.getElementById('totalInactive').innerText = data.DraftArticles;
+
+            const cateBody = document.getElementById('categoryStatsBody');
+            if (data.ByCategory && data.ByCategory.length > 0) {
+                cateBody.innerHTML = data.ByCategory.map(item => `
+                    <tr>
+                        <td>${item.CategoryName}</td>
+                        <td class="text-end fw-bold">${item.Count}</td>
+                    </tr>
+                `).join('');
+            } else {
+                cateBody.innerHTML = '<tr><td colspan="2" class="text-center">No data</td></tr>';
+            }
+
+            const authorBody = document.getElementById('authorStatsBody');
+            if (data.ByAuthor && data.ByAuthor.length > 0) {
+                authorBody.innerHTML = data.ByAuthor.map(item => `
+                    <tr>
+                        <td>${item.AuthorName}</td>
+                        <td class="text-end fw-bold">${item.Count}</td>
                     </tr>
                 `).join('');
             } else {
