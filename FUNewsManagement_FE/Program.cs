@@ -26,10 +26,35 @@ var retryPolicy = Polly.Extensions.Http.HttpPolicyExtensions
     .HandleTransientHttpError()
     .WaitAndRetryAsync(3, retryAttempt => TimeSpan.FromSeconds(Math.Pow(2, retryAttempt - 1)));
 
-// Register Typed Clients
+// Register Named Clients
+builder.Services.AddHttpClient("Assignment1", client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["ApiSettings:Assignment1"]!);
+})
+.AddHttpMessageHandler<FUNewsManagement_FE.HttpHandlers.TokenRefreshDelegatingHandler>()
+.AddHttpMessageHandler<FUNewsManagement_FE.HttpHandlers.LoggingDelegatingHandler>()
+.AddPolicyHandler(retryPolicy);
+
+builder.Services.AddHttpClient("AnalyticsAPI", client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["ApiSettings:AnalyticsAPI"]!);
+})
+.AddHttpMessageHandler<FUNewsManagement_FE.HttpHandlers.TokenRefreshDelegatingHandler>()
+.AddHttpMessageHandler<FUNewsManagement_FE.HttpHandlers.LoggingDelegatingHandler>()
+.AddPolicyHandler(retryPolicy);
+
+builder.Services.AddHttpClient("AIAPI", client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["ApiSettings:AIAPI"]!);
+})
+.AddHttpMessageHandler<FUNewsManagement_FE.HttpHandlers.TokenRefreshDelegatingHandler>()
+.AddHttpMessageHandler<FUNewsManagement_FE.HttpHandlers.LoggingDelegatingHandler>()
+.AddPolicyHandler(retryPolicy);
+
+// Register Typed Clients (keeping them to not break existing controllers)
 builder.Services.AddHttpClient<FUNewsManagement_FE.Clients.ICoreApiClient, FUNewsManagement_FE.Clients.CoreApiClient>(client =>
 {
-    client.BaseAddress = new Uri("http://localhost:5039/");
+    client.BaseAddress = new Uri(builder.Configuration["ApiSettings:Assignment1"]!);
 })
 .AddHttpMessageHandler<FUNewsManagement_FE.HttpHandlers.TokenRefreshDelegatingHandler>()
 .AddHttpMessageHandler<FUNewsManagement_FE.HttpHandlers.LoggingDelegatingHandler>()
@@ -37,7 +62,7 @@ builder.Services.AddHttpClient<FUNewsManagement_FE.Clients.ICoreApiClient, FUNew
 
 builder.Services.AddHttpClient<FUNewsManagement_FE.Clients.IAnalyticsApiClient, FUNewsManagement_FE.Clients.AnalyticsApiClient>(client =>
 {
-    client.BaseAddress = new Uri("https://localhost:7123/"); // Default Analytics API port, update if different
+    client.BaseAddress = new Uri(builder.Configuration["ApiSettings:AnalyticsAPI"]!);
 })
 .AddHttpMessageHandler<FUNewsManagement_FE.HttpHandlers.TokenRefreshDelegatingHandler>()
 .AddHttpMessageHandler<FUNewsManagement_FE.HttpHandlers.LoggingDelegatingHandler>()
@@ -45,7 +70,7 @@ builder.Services.AddHttpClient<FUNewsManagement_FE.Clients.IAnalyticsApiClient, 
 
 builder.Services.AddHttpClient<FUNewsManagement_FE.Clients.IAIApiClient, FUNewsManagement_FE.Clients.AIApiClient>(client =>
 {
-    client.BaseAddress = new Uri("https://localhost:7124/"); // Default AI API port, update if different
+    client.BaseAddress = new Uri(builder.Configuration["ApiSettings:AIAPI"]!);
 })
 .AddHttpMessageHandler<FUNewsManagement_FE.HttpHandlers.TokenRefreshDelegatingHandler>()
 .AddHttpMessageHandler<FUNewsManagement_FE.HttpHandlers.LoggingDelegatingHandler>()
