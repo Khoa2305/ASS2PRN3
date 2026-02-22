@@ -1,0 +1,220 @@
+@using Microsoft.AspNetCore.Http
+@{
+    ViewData["Title"] = "Report Statistics";
+    var accessToken = Context.Session.GetString("ACCESS_TOKEN");
+}
+
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Report Statistics</h2>
+        <div class="d-flex gap-2">
+            <div class="input-group">
+                <span class="input-group-text">From</span>
+                <input type="date" id="startDate" class="form-control">
+            </div>
+            <div class="input-group">
+                <span class="input-group-text">To</span>
+                <input type="date" id="endDate" class="form-control">
+            </div>
+            <button class="btn btn-primary" onclick="loadReport()">
+                <i class="bi bi-filter"></i> Generate Report
+            </button>
+            <button class="btn btn-success" onclick="downloadExcel()">
+                <i class="bi bi-file-earmark-excel"></i> Export Excel
+            </button>
+        </div>
+    </div>
+
+    <div id="alertContainer"></div>
+
+    <!-- Summary Cards -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card bg-success text-white shadow-sm">
+                <div class="card-body">
+                    <h5 class="card-title">Total Active Articles</h5>
+                    <h2 id="totalActive">0</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card bg-secondary text-white shadow-sm">
+                <div class="card-body">
+                    <h5 class="card-title">Total Inactive Articles</h5>
+                    <h2 id="totalInactive">0</h2>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- By Category -->
+        <div class="col-md-6 mb-4">
+            <div class="card shadow-sm h-100">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0">Articles by Category</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Category</th>
+                                    <th class="text-end">Count</th>
+                                </tr>
+                            </thead>
+                            <tbody id="categoryStatsBody">
+                                <tr><td colspan="2" class="text-center">No data</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- By Author -->
+        <div class="col-md-6 mb-4">
+            <div class="card shadow-sm h-100">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0">Articles by Author</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Author</th>
+                                    <th class="text-end">Count</th>
+                                </tr>
+                            </thead>
+                            <tbody id="authorStatsBody">
+                                <tr><td colspan="2" class="text-center">No data</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        const API_BASE_URL = 'http://localhost:5039/api/report';
+        const ACCESS_TOKEN = '@accessToken';
+
+        document.addEventListener('DOMContentLoaded', () => {
+            // Set default dates (past 30 days)
+            const today = new Date();
+            const lastMonth = new Date();
+            lastMonth.setDate(today.getDate() - 30);
+            
+            document.getElementById('endDate').value = today.toISOString().split('T')[0];
+            document.getElementById('startDate').value = lastMonth.toISOString().split('T')[0];
+            
+            loadReport();
+        });
+
+        async function loadReport() {
+            const start = document.getElementById('startDate').value;
+            const end = document.getElementById('endDate').value;
+            
+            let url = API_BASE_URL;
+            const params = new URLSearchParams();
+            if (start) params.append('startDate', start);
+            if (end) params.append('endDate', end);
+            if (params.toString()) url += `?${params.toString()}`;
+
+            try {
+                const response = await fetch(url, {
+                    headers: {
+                        'Authorization': `Bearer ${ACCESS_TOKEN}`
+                    }
+                });
+                const result = await response.json();
+                
+                if (result.success) {
+                    renderReport(result.data);
+                } else {
+                    showAlert(result.message || 'Failed to load report', 'danger');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                showAlert('Could not connect to API', 'danger');
+            }
+        }
+
+        async function downloadExcel() {
+            const start = document.getElementById('startDate').value;
+            const end = document.getElementById('endDate').value;
+            
+            let url = `${API_BASE_URL}/excel`;
+            const params = new URLSearchParams();
+            if (start) params.append('startDate', start);
+            if (end) params.append('endDate', end);
+            if (params.toString()) url += `?${params.toString()}`;
+
+            try {
+                const response = await fetch(url, {
+                    headers: {
+                        'Authorization': `Bearer ${ACCESS_TOKEN}`
+                    }
+                });
+
+                if (!response.ok) throw new Error('Download failed');
+
+                const blob = await response.blob();
+                const downloadUrl = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = downloadUrl;
+                a.download = `Report_${new Date().toISOString().split('T')[0]}.xlsx`;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                window.URL.revokeObjectURL(downloadUrl);
+            } catch (error) {
+                console.error('Error:', error);
+                showAlert('Could not download Excel file', 'danger');
+            }
+        }
+
+        function renderReport(data) {
+            document.getElementById('totalActive').innerText = data.totalActive;
+            document.getElementById('totalInactive').innerText = data.totalInactive;
+
+            const cateBody = document.getElementById('categoryStatsBody');
+            if (data.byCategory && data.byCategory.length > 0) {
+                cateBody.innerHTML = data.byCategory.map(item => `
+                    <tr>
+                        <td>${item.key}</td>
+                        <td class="text-end fw-bold">${item.count}</td>
+                    </tr>
+                `).join('');
+            } else {
+                cateBody.innerHTML = '<tr><td colspan="2" class="text-center">No data</td></tr>';
+            }
+
+            const authorBody = document.getElementById('authorStatsBody');
+            if (data.byAuthor && data.byAuthor.length > 0) {
+                authorBody.innerHTML = data.byAuthor.map(item => `
+                    <tr>
+                        <td>${item.key}</td>
+                        <td class="text-end fw-bold">${item.count}</td>
+                    </tr>
+                `).join('');
+            } else {
+                authorBody.innerHTML = '<tr><td colspan="2" class="text-center">No data</td></tr>';
+            }
+        }
+
+        function showAlert(message, type) {
+            const container = document.getElementById('alertContainer');
+            container.innerHTML = `
+                <div class="alert alert-${type} alert-dismissible fade show" role="alert">
+                    ${message}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            `;
+        }
+    </script>
+}

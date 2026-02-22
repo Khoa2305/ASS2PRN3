@@ -1,0 +1,185 @@
+@using Microsoft.AspNetCore.Http
+@{
+    ViewData["Title"] = "My Profile";
+    var accessToken = Context.Session.GetString("ACCESS_TOKEN");
+}
+
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card shadow-lg border-0 rounded-lg">
+                <div class="card-header bg-primary text-white text-center py-4">
+                    <h3 class="fw-light my-1"><i class="bi bi-person-circle"></i> My Profile</h3>
+                </div>
+                <div class="card-body p-5">
+                    <div id="alertContainer"></div>
+
+                    <!-- Profile Info -->
+                    <form id="profileForm" class="mb-5">
+                        <h4 class="mb-4 border-bottom pb-2">Personal Information</h4>
+                        <div class="row mb-3">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label text-muted">Account Name</label>
+                                <input type="text" id="accountName" class="form-control form-control-lg" placeholder="Enter your name" required>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label text-muted">Email address</label>
+                                <input type="email" id="accountEmail" class="form-control form-control-lg" placeholder="Email" required>
+                            </div>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label text-muted">Account ID</label>
+                                <input type="text" id="accountId" class="form-control form-control-lg" disabled>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label text-muted">Role</label>
+                                <input type="text" id="accountRoleName" class="form-control form-control-lg" disabled>
+                            </div>
+                        </div>
+                        <div class="text-end">
+                            <button type="submit" class="btn btn-primary btn-lg px-5">
+                                <i class="bi bi-save"></i> Update Profile
+                            </button>
+                        </div>
+                    </form>
+
+                    <!-- Change Password -->
+                    <form id="passwordForm">
+                        <h4 class="mb-4 border-bottom pb-2">Security</h4>
+                        <div class="mb-3">
+                            <label class="form-label text-muted">Current Password</label>
+                            <input type="password" id="currentPassword" class="form-control form-control-lg" required>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label text-muted">New Password</label>
+                                <input type="password" id="newPassword" class="form-control form-control-lg" required minlength="8" maxlength="32">
+                                <div class="form-text">Must be 8-32 characters.</div>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label text-muted">Confirm New Password</label>
+                                <input type="password" id="confirmPassword" class="form-control form-control-lg" required>
+                            </div>
+                        </div>
+                        <div class="text-end">
+                            <button type="submit" class="btn btn-dark btn-lg px-5">
+                                <i class="bi bi-shield-lock"></i> Change Password
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        const API_BASE_URL = 'http://localhost:5039/api/accounts';
+        const ACCESS_TOKEN = '@accessToken';
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            await loadProfile();
+        });
+
+        async function loadProfile() {
+            try {
+                const response = await fetch(`${API_BASE_URL}/me`, {
+                    headers: { 'Authorization': `Bearer ${ACCESS_TOKEN}` }
+                });
+                const result = await response.json();
+                if (result.success) {
+                    const data = result.data;
+                    document.getElementById('accountId').value = data.id || '';
+                    document.getElementById('accountName').value = data.name || '';
+                    document.getElementById('accountEmail').value = data.email || '';
+                    
+                    let roleText = 'Admin';
+                    if(data.role === 1) roleText = 'Staff';
+                    if(data.role === 2) roleText = 'Lecturer';
+                    document.getElementById('accountRoleName').value = roleText;
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                showAlert('Failed to load profile data', 'danger');
+            }
+        }
+
+        document.getElementById('profileForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const data = {
+                accountName: document.getElementById('accountName').value,
+                accountEmail: document.getElementById('accountEmail').value
+            };
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/me/profile`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${ACCESS_TOKEN}`
+                    },
+                    body: JSON.stringify(data)
+                });
+                const result = await response.json();
+                if (result.success) {
+                    showAlert('Profile updated successfully!', 'success');
+                } else {
+                    showAlert(result.message || 'Update failed', 'danger');
+                }
+            } catch (error) {
+                showAlert('Error connecting to server', 'danger');
+            }
+        });
+
+        document.getElementById('passwordForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const current = document.getElementById('currentPassword').value;
+            const next = document.getElementById('newPassword').value;
+            const confirm = document.getElementById('confirmPassword').value;
+
+            if (next !== confirm) {
+                showAlert('New passwords do not match', 'warning');
+                return;
+            }
+
+            const data = {
+                currentPassword: current,
+                newPassword: next,
+                confirmPassword: confirm
+            };
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/me/change-password`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${ACCESS_TOKEN}`
+                    },
+                    body: JSON.stringify(data)
+                });
+                const result = await response.json();
+                if (result.success) {
+                    showAlert('Password changed successfully!', 'success');
+                    e.target.reset();
+                } else {
+                    showAlert(result.message || 'Failed to change password', 'danger');
+                }
+            } catch (error) {
+                showAlert('Error connecting to server', 'danger');
+            }
+        });
+
+        function showAlert(message, type) {
+            const container = document.getElementById('alertContainer');
+            container.innerHTML = `
+                <div class="alert alert-${type} alert-dismissible fade show" role="alert">
+                    ${message}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            `;
+            window.scrollTo(0, 0);
+        }
+    </script>
+}

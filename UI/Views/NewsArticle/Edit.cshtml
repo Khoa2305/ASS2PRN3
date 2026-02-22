@@ -1,0 +1,90 @@
+﻿@model UI.dto.response.NewsArticleResponseDto
+
+<form asp-action="Edit" method="post">
+    @Html.AntiForgeryToken()
+
+    <input type="hidden" asp-for="NewsArticleId" />
+
+    <!-- show lỗi tổng -->
+    <div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
+
+    <div class="mb-3">
+        <label>News Title</label>
+        <input asp-for="NewsTitle" class="form-control" />
+        <span asp-validation-for="NewsTitle" class="text-danger"></span>
+    </div>
+
+    <div class="mb-3">
+        <label>Headline</label>
+        <input asp-for="Headline" class="form-control" />
+        <span asp-validation-for="Headline" class="text-danger"></span>
+    </div>
+
+    <div class="mb-3">
+        <label>News Content</label>
+        <textarea asp-for="NewsContent" class="form-control"></textarea>
+        <span asp-validation-for="NewsContent" class="text-danger"></span>
+    </div>
+
+    <div class="mb-3">
+        <label>News Source</label>
+        <input asp-for="NewsSource" class="form-control" />
+        <span asp-validation-for="NewsSource" class="text-danger"></span>
+    </div>
+
+    <div class="mb-3">
+        <label>Category</label>
+        <select name="CategoryId" class="form-select">
+            <option value="">-- Select category --</option>
+            @if (ViewBag.Categories != null)
+            {
+                @foreach (var cat in (List<UI.dto.response.CategoryResponseDto>)ViewBag.Categories)
+                {
+                    <option value="@cat.CategoryId" selected="@(Model.CategoryId == cat.CategoryId)">
+                        @cat.CategoryName
+                    </option>
+                }
+            }
+        </select>
+        <span class="text-danger">
+            @Html.ValidationMessage("CategoryId")
+        </span>
+    </div>
+
+    <div class="mb-3">
+        <label>Tags</label>
+        <select name="TagIds" class="form-select" multiple>
+            @if (ViewBag.Tags != null)
+            {
+                @foreach (var tag in (List<UI.dto.response.TagResponseDto>)ViewBag.Tags)
+                {
+                    <option value="@tag.TagId" selected="@(Model.Tags != null && Model.Tags.Contains(tag.TagId))">
+                        @tag.TagName
+                    </option>
+                }
+            }
+        </select>
+    </div>
+
+    <div class="mb-3">
+        <label>Created Date</label>
+        <input value="@Model.CreatedDate"
+               class="form-control"
+               disabled />
+    </div>
+
+    <div class="mb-3">
+        <label>Status</label>
+        <input value="@Model.NewsStatus"
+               class="form-control"
+               disabled />
+    </div>
+
+    <button type="submit" class="btn btn-primary">
+        Save
+    </button>
+</form>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

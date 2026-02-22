@@ -1,0 +1,274 @@
+@using Microsoft.AspNetCore.Http
+@{
+    ViewData["Title"] = "Tag Management";
+    var accessToken = Context.Session.GetString("ACCESS_TOKEN");
+}
+
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Tag Management</h2>
+        <button class="btn btn-success" onclick="showCreateModal()">
+            <i class="bi bi-plus-circle"></i> Create New Tag
+        </button>
+    </div>
+
+    <!-- Filters & Search -->
+    <div class="card shadow-sm mb-4 border-0 bg-light">
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <input type="text" id="searchInput" class="form-control" placeholder="Search by tag name or note..." onkeyup="applyFilters()">
+                </div>
+                <div class="col-md-3">
+                    <select id="pageSize" class="form-select" onchange="applyFilters()">
+                        <option value="5">5 per page</option>
+                        <option value="10" selected>10 per page</option>
+                        <option value="20">20 per page</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <select id="sortOrder" class="form-select" onchange="applyFilters()">
+                        <option value="id_asc">Sort by ID (Asc)</option>
+                        <option value="name_asc">Sort by Name (A-Z)</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="alertContainer"></div>
+
+    <div class="card shadow-sm">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th>ID</th>
+                            <th>Tag Name</th>
+                            <th>Note</th>
+                            <th>Articles Count</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tagTableBody">
+                        <tr><td colspan="5" class="text-center">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Pagination -->
+            <nav class="d-flex justify-content-between align-items-center mt-3">
+                <small id="paginationInfo" class="text-muted"></small>
+                <ul class="pagination pagination-sm mb-0" id="paginationControls"></ul>
+            </nav>
+        </div>
+    </div>
+</div>
+
+<!-- Tag Modal -->
+<div class="modal fade" id="tagModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalTitle">Create Tag</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="tagForm">
+                    <input type="hidden" id="tagId">
+                    <div class="mb-3">
+                        <label for="tagName" class="form-label">Tag Name</label>
+                        <input type="text" class="form-control" id="tagName" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="tagNote" class="form-label">Note</label>
+                        <textarea class="form-control" id="tagNote" rows="3"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" id="saveBtn" onclick="saveTag()">Save changes</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        const API_BASE_URL = 'http://localhost:5039/api/tag';
+        const ACCESS_TOKEN = '@accessToken';
+        
+        let allTags = [];
+        let filteredTags = [];
+        let currentPage = 1;
+        let tagModal;
+
+        document.addEventListener('DOMContentLoaded', () => {
+            tagModal = new bootstrap.Modal(document.getElementById('tagModal'));
+            loadTags();
+        });
+
+        async function loadTags() {
+            try {
+                const response = await fetch(API_BASE_URL, {
+                    headers: { 'Authorization': `Bearer ${ACCESS_TOKEN}` }
+                });
+                const result = await response.json();
+                if (result.success) {
+                    allTags = result.data;
+                    applyFilters();
+                } else {
+                    showAlert(result.message || 'Failed to load tags', 'danger');
+                }
+            } catch (error) {
+                showAlert('Could not connect to API', 'danger');
+            }
+        }
+
+        function applyFilters() {
+            const search = document.getElementById('searchInput').value.toLowerCase();
+            const sort = document.getElementById('sortOrder').value;
+
+            filteredTags = allTags.filter(t => 
+                (t.tagName && t.tagName.toLowerCase().includes(search)) ||
+                (t.note && t.note.toLowerCase().includes(search))
+            );
+
+            filteredTags.sort((a, b) => {
+                if (sort === 'id_asc') return a.tagId - b.tagId;
+                if (sort === 'name_asc') return (a.tagName || '').localeCompare(b.tagName || '');
+                return 0;
+            });
+
+            currentPage = 1;
+            renderTable();
+        }
+
+        function renderTable() {
+            const pageSize = parseInt(document.getElementById('pageSize').value);
+            const startIndex = (currentPage - 1) * pageSize;
+            const endIndex = Math.min(startIndex + pageSize, filteredTags.length);
+            const pagedItems = filteredTags.slice(startIndex, endIndex);
+
+            const tbody = document.getElementById('tagTableBody');
+            if (filteredTags.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center">No tags found.</td></tr>';
+                document.getElementById('paginationInfo').innerText = '';
+                document.getElementById('paginationControls').innerHTML = '';
+                return;
+            }
+
+            tbody.innerHTML = pagedItems.map(tag => `
+                <tr>
+                    <td>${tag.tagId}</td>
+                    <td><span class="badge bg-info text-dark">#${tag.tagName}</span></td>
+                    <td>${tag.note || ''}</td>
+                    <td>${tag.numberArticle || 0}</td>
+                    <td class="text-end">
+                        <button class="btn btn-sm btn-outline-primary me-1" onclick="showEditModal(${tag.tagId})">Edit</button>
+                        <button class="btn btn-sm btn-outline-danger" onclick="deleteTag(${tag.tagId})">Delete</button>
+                    </td>
+                </tr>
+            `).join('');
+
+            document.getElementById('paginationInfo').innerText = 
+                `Showing ${startIndex + 1} to ${endIndex} of ${filteredTags.length} tags`;
+            
+            renderPagination(Math.ceil(filteredTags.length / pageSize));
+        }
+
+        function renderPagination(totalPages) {
+            const controls = document.getElementById('paginationControls');
+            controls.innerHTML = '';
+            if (totalPages <= 1) return;
+
+            controls.innerHTML += `<li class="page-item ${currentPage === 1 ? 'disabled' : ''}">
+                <a class="page-link" href="#" onclick="changePage(${currentPage - 1})">Prev</a></li>`;
+
+            for(let i = 1; i <= totalPages; i++) {
+                if (i === 1 || i === totalPages || (i >= currentPage - 2 && i <= currentPage + 2)) {
+                    controls.innerHTML += `<li class="page-item ${i === currentPage ? 'active' : ''}">
+                        <a class="page-link" href="#" onclick="changePage(${i})">${i}</a></li>`;
+                } else if (i === currentPage - 3 || i === currentPage + 3) {
+                    controls.innerHTML += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
+                }
+            }
+
+            controls.innerHTML += `<li class="page-item ${currentPage === totalPages ? 'disabled' : ''}">
+                <a class="page-link" href="#" onclick="changePage(${currentPage + 1})">Next</a></li>`;
+        }
+
+        function changePage(p) {
+            currentPage = p;
+            renderTable();
+        }
+
+        function showCreateModal() {
+            document.getElementById('modalTitle').innerText = 'Create Tag';
+            document.getElementById('tagId').value = '';
+            document.getElementById('tagForm').reset();
+            tagModal.show();
+        }
+
+        async function showEditModal(id) {
+            try {
+                const response = await fetch(`${API_BASE_URL}/${id}`, {
+                    headers: { 'Authorization': `Bearer ${ACCESS_TOKEN}` }
+                });
+                const result = await response.json();
+                if (result.success) {
+                    const tag = result.data;
+                    document.getElementById('modalTitle').innerText = 'Edit Tag';
+                    document.getElementById('tagId').value = tag.tagId;
+                    document.getElementById('tagName').value = tag.tagName;
+                    document.getElementById('tagNote').value = tag.note || '';
+                    tagModal.show();
+                }
+            } catch (error) { showAlert('Error loading tag', 'danger'); }
+        }
+
+        async function saveTag() {
+            const id = document.getElementById('tagId').value;
+            const data = {
+                tagName: document.getElementById('tagName').value,
+                note: document.getElementById('tagNote').value
+            };
+
+            try {
+                const response = await fetch(id ? `${API_BASE_URL}/${id}` : API_BASE_URL, {
+                    method: id ? 'PUT' : 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${ACCESS_TOKEN}` },
+                    body: JSON.stringify(data)
+                });
+                const result = await response.json();
+                if (result.success) {
+                    tagModal.hide();
+                    showAlert(result.message, 'success');
+                    loadTags();
+                } else { showAlert(result.message, 'danger'); }
+            } catch (error) { showAlert('Error saving tag', 'danger'); }
+        }
+
+        async function deleteTag(id) {
+            if (!confirm('Are you sure?')) return;
+            try {
+                const response = await fetch(`${API_BASE_URL}/${id}`, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Bearer ${ACCESS_TOKEN}` }
+                });
+                const result = await response.json();
+                if (result.success) { showAlert(result.message, 'success'); loadTags(); }
+                else { showAlert(result.message, 'danger'); }
+            } catch (error) { showAlert('Error deleting tag', 'danger'); }
+        }
+
+        function showAlert(message, type) {
+            const container = document.getElementById('alertContainer');
+            container.innerHTML = `<div class="alert alert-${type} alert-dismissible fade show" role="alert">
+                ${message}<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>`;
+            setTimeout(() => { if(container.querySelector('.alert')) container.innerHTML = ''; }, 3000);
+        }
+    </script>
+}
