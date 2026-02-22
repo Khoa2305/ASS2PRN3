@@ -25,6 +25,8 @@ public partial class FunewsManagementContext : DbContext
 
     public virtual DbSet<RefreshToken> RefreshTokens { get; set; }
 
+    public virtual DbSet<AuditLog> AuditLogs { get; set; }
+
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
         var config = new ConfigurationBuilder().AddJsonFile("appsettings.json").Build();
@@ -136,6 +138,18 @@ public partial class FunewsManagementContext : DbContext
             entity.Property(e => e.ExpirationDate).HasColumnType("datetime");
             entity.Property(e => e.CreatedDate).HasColumnType("datetime");
             entity.Property(e => e.IsRevoked).HasDefaultValue(false);
+        });
+
+        modelBuilder.Entity<AuditLog>(entity =>
+        {
+            entity.ToTable("AuditLog");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasDefaultValueSql("NEWID()");
+            entity.Property(e => e.Action).HasMaxLength(50).IsRequired();
+            entity.Property(e => e.EntityName).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.BeforeData).HasColumnType("nvarchar(max)");
+            entity.Property(e => e.AfterData).HasColumnType("nvarchar(max)");
+            entity.Property(e => e.Timestamp).HasColumnType("datetime");
         });
 
         OnModelCreatingPartial(modelBuilder);

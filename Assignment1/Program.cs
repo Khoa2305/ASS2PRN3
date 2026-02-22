@@ -1,4 +1,5 @@
-﻿using Assignment1.Middleware;
+﻿using Assignment1.Interceptors;
+using Assignment1.Middleware;
 using Assignment1.Models;
 using Assignment1.Repositories.Imp;
 using Assignment1.Repositories.Interface;
@@ -43,10 +44,16 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 builder.Services.AddAuthorization();
 
+// ── Audit Interceptor ────────────────────────────────────────────────────────
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddSingleton<AuditInterceptor>();
+
 // ── Database ─────────────────────────────────────────────────────────────────
-builder.Services.AddDbContext<FunewsManagementContext>(
-    opt => opt.UseSqlServer(builder.Configuration.GetConnectionString("MyCnn"))
-    );
+builder.Services.AddDbContext<FunewsManagementContext>((sp, opt) =>
+{
+    opt.UseSqlServer(builder.Configuration.GetConnectionString("MyCnn"));
+    opt.AddInterceptors(sp.GetRequiredService<AuditInterceptor>());
+});
 
 // ── CORS ─────────────────────────────────────────────────────────────────────
 builder.Services.AddCors(options =>
@@ -66,6 +73,7 @@ builder.Services.AddScoped<ICategoryRepository, CategoryRepository>();
 builder.Services.AddScoped<ITagRepository, TagRepository>();
 builder.Services.AddScoped<INewsArticleRepository, NewsArticleRepository>();
 builder.Services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
+builder.Services.AddScoped<IAuditLogRepository, AuditLogRepository>();
 
 // ── Services ─────────────────────────────────────────────────────────────────
 builder.Services.AddScoped<INewsArticleService, NewsArticleService>();
