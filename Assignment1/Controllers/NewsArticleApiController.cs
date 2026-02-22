@@ -147,6 +147,9 @@ namespace Assignment1.Controllers
             NewsArticle a = _articleService.Find(id);
             var related = _articleService.GetRelatedArticles(id);
 
+            // Increment view count (fire-and-forget style — non-blocking)
+            _articleService.IncrementViewCount(id);
+
             var response = new NewsArticleDetailResponseDto
             {
                 NewsArticleId = a.NewsArticleId,
@@ -185,6 +188,24 @@ namespace Assignment1.Controllers
                     Message = "Delete success",
                 }
             );
+        }
+
+        /// <summary>Get top trending articles ordered by ViewCount descending.</summary>
+        [HttpGet("trending")]
+        [AllowAnonymous]
+        public ActionResult<ApiResponse<List<NewsArticleResponseDto>>> GetTrending([FromQuery] int top = 5)
+        {
+            if (top < 1 || top > 100) top = 5;
+            var articles = _articleService.GetTrendingArticles(top)
+                .Select(a => MapHelperNewsArticle.GetResponseFromOrigin(a))
+                .ToList();
+
+            return Ok(new ApiResponse<List<NewsArticleResponseDto>>
+            {
+                Success = true,
+                Message = $"Top {top} trending articles",
+                Data = articles
+            });
         }
     }
 }

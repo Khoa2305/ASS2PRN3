@@ -53,5 +53,15 @@ namespace Assignment1.Repositories.Imp
         {
             return await NewsArticleDAO.Instance.GetNextIdAsync(_context);
         }
+
+        public async Task IncrementViewCountAsync(string id)
+        {
+            await NewsArticleDAO.Instance.IncrementViewCountAsync(_context, id);
+        }
+
+        public async Task<List<NewsArticle>> GetTrendingAsync(int top = 5)
+        {
+            return await NewsArticleDAO.Instance.GetTrendingAsync(_context, top);
+        }
     }
 }

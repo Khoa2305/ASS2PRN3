@@ -11,5 +11,7 @@ namespace Assignment1.Services.Interface
         public List<NewsArticle> GetRelatedArticles(string id);
         public void Delete(string id);
         public NewsArticle Duplicate(string id, short createdById);
+        public void IncrementViewCount(string id);
+        public List<NewsArticle> GetTrendingArticles(int top = 5);
     }
 }

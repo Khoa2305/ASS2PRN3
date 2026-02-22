@@ -103,5 +103,26 @@ namespace Assignment1.DAO
             }
             return (maxId + 1).ToString();
         }
+
+        /// <summary>Atomically increment ViewCount by 1 for the given article.</summary>
+        public async Task IncrementViewCountAsync(FunewsManagementContext context, string id)
+        {
+            await context.NewsArticles
+                .Where(a => a.NewsArticleId == id)
+                .ExecuteUpdateAsync(s => s.SetProperty(a => a.ViewCount, a => a.ViewCount + 1));
+        }
+
+        /// <summary>Return the top <paramref name="top"/> articles ordered by ViewCount descending.</summary>
+        public async Task<List<NewsArticle>> GetTrendingAsync(FunewsManagementContext context, int top = 5)
+        {
+            return await context.NewsArticles
+                .Include(a => a.Tags)
+                .Include(a => a.Category)
+                .Include(a => a.CreatedBy)
+                .Where(a => a.NewsStatus == true)
+                .OrderByDescending(a => a.ViewCount)
+                .Take(top)
+                .ToListAsync();
+        }
     }
 }

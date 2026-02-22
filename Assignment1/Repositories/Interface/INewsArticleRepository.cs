@@ -12,5 +12,7 @@ namespace Assignment1.Repositories.Interface
         Task DeleteNewsArticleAsync(string id);
         IQueryable<NewsArticle> GetNewsArticlesQueryable();
         Task<string> GetNextIdAsync();
+        Task IncrementViewCountAsync(string id);
+        Task<List<NewsArticle>> GetTrendingAsync(int top = 5);
     }
 }

@@ -143,5 +143,14 @@ namespace Assignment1.Services.Imp
 
             return _newsArticleRepository.AddNewsArticleAsync(duplicated).GetAwaiter().GetResult();
         }
+        public void IncrementViewCount(string id)
+        {
+            _newsArticleRepository.IncrementViewCountAsync(id).GetAwaiter().GetResult();
+        }
+
+        public List<NewsArticle> GetTrendingArticles(int top = 5)
+        {
+            return _newsArticleRepository.GetTrendingAsync(top).GetAwaiter().GetResult();
+        }
     }
 }
