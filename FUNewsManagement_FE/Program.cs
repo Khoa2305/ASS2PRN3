@@ -17,6 +17,9 @@ builder.Services.AddSession(options =>
     options.Cookie.IsEssential = true;
 });
 
+// Register Services
+builder.Services.AddTransient<FUNewsManagement_FE.Services.ITokenService, FUNewsManagement_FE.Services.TokenService>();
+
 // Register DelegatingHandlers
 builder.Services.AddTransient<FUNewsManagement_FE.HttpHandlers.LoggingDelegatingHandler>();
 builder.Services.AddTransient<FUNewsManagement_FE.HttpHandlers.TokenRefreshDelegatingHandler>();
