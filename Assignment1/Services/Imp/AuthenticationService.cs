@@ -13,12 +13,45 @@ namespace Assignment1.Services.Imp
     public class AuthenticationService : IAuthenticationService
     {
         private readonly IAccountRepository _accountRepository;
+        private readonly IRefreshTokenRepository _refreshTokenRepository;
         private readonly IConfiguration _configuration;
 
-        public AuthenticationService(IAccountRepository accountRepository, IConfiguration configuration)
+        public AuthenticationService(
+            IAccountRepository accountRepository,
+            IRefreshTokenRepository refreshTokenRepository,
+            IConfiguration configuration)
         {
             _accountRepository = accountRepository;
+            _refreshTokenRepository = refreshTokenRepository;
             _configuration = configuration;
+        }
+
+        // ── Existing — untouched ─────────────────────────────────────────────
+
+        public SystemAccount isCorrectAccount(string username, string password)
+        {
+            string adminEmail    = _configuration["AdminAccount:Email"]!;
+            string adminPassword = _configuration["AdminAccount:Password"]!;
+
+            if (username.Equals(adminEmail) && password.Equals(adminPassword))
+            {
+                return new SystemAccount
+                {
+                    AccountEmail    = adminEmail,
+                    AccountRole     = null, // Admin role is null to distinguish from Staff (1) and Lecturer (2)
+                    AccountId       = 999,
+                    AccountName     = "Admin",
+                    AccountPassword = password,
+                };
+            }
+
+            var accounts = _accountRepository.GetAccountsAsync().GetAwaiter().GetResult();
+            SystemAccount? account = accounts.FirstOrDefault(s => s.AccountEmail == username && s.AccountPassword == password);
+
+            if (account == null)
+                throw new AppException(Fail.WRONG_ACCOUNT);
+
+            return account;
         }
 
         public string GenerateAccessToken(SystemAccount account)
@@ -45,41 +78,14 @@ namespace Assignment1.Services.Imp
             };
 
             var token = new JwtSecurityToken(
-                issuer:            issuer,
-                audience:          aud,
-                claims:            claims,
-                expires:           DateTime.UtcNow.AddMinutes(expMin),
+                issuer:             issuer,
+                audience:           aud,
+                claims:             claims,
+                expires:            DateTime.UtcNow.AddMinutes(expMin),
                 signingCredentials: creds
             );
 
             return new JwtSecurityTokenHandler().WriteToken(token);
-        }
-
-        public SystemAccount isCorrectAccount(string username, string password)
-        {
-            string adminEmail    = _configuration["AdminAccount:Email"]!;
-            string adminPassword = _configuration["AdminAccount:Password"]!;
-
-            if (username.Equals(adminEmail) && password.Equals(adminPassword))
-            {
-                return new SystemAccount
-                {
-                    AccountEmail    = adminEmail,
-                    AccountRole     = null, // Admin role is null to distinguish from Staff (1) and Lecturer (2)
-                    AccountId       = 999,
-                    AccountName     = "Admin",
-                    AccountPassword = password,
-                };
-            }
-
-            var accounts = _accountRepository.GetAccountsAsync().GetAwaiter().GetResult();
-            SystemAccount? account = accounts.FirstOrDefault(s => s.AccountEmail == username && s.AccountPassword == password);
-
-            if (account == null)
-            {
-                throw new AppException(Fail.WRONG_ACCOUNT);
-            }
-            return account;
         }
 
         public bool IsValidAccessToken(string accessToken, out ClaimsPrincipal claimsPrincipal)
@@ -109,6 +115,65 @@ namespace Assignment1.Services.Imp
                 claimsPrincipal = null!;
                 return false;
             }
+        }
+
+        // ── New — Refresh Token ──────────────────────────────────────────────
+
+        public async Task<string> GenerateRefreshTokenAsync(SystemAccount account)
+        {
+            int expDays = int.Parse(_configuration["Jwt:RefreshTokenExpirationDays"] ?? "7");
+
+            var refreshToken = new RefreshToken
+            {
+                Id             = Guid.NewGuid(),
+                AccountId      = account.AccountId,
+                Token          = Guid.NewGuid().ToString("N") + Guid.NewGuid().ToString("N"), // 64-char opaque token
+                ExpirationDate = DateTime.UtcNow.AddDays(expDays),
+                IsRevoked      = false,
+                CreatedDate    = DateTime.UtcNow
+            };
+
+            await _refreshTokenRepository.AddAsync(refreshToken);
+            return refreshToken.Token;
+        }
+
+        public async Task<(string AccessToken, string NewRefreshToken)> RefreshAsync(string refreshToken)
+        {
+            var stored = await _refreshTokenRepository.GetByTokenAsync(refreshToken);
+
+            if (stored == null || stored.IsRevoked || stored.ExpirationDate <= DateTime.UtcNow)
+                throw new AppException(Fail.EXPIRE_TOKEN);
+
+            // Revoke old token (rotation)
+            await _refreshTokenRepository.RevokeAsync(stored);
+
+            // Reconstruct a minimal SystemAccount from the stored token to sign a new access token
+            var accounts       = await _accountRepository.GetAccountsAsync();
+            SystemAccount? account = accounts.FirstOrDefault(a => a.AccountId == stored.AccountId);
+
+            // Special case: Admin (AccountId = 999) does not exist in DB
+            if (account == null)
+            {
+                if (stored.AccountId == 999)
+                {
+                    account = new SystemAccount
+                    {
+                        AccountId   = 999,
+                        AccountName = "Admin",
+                        AccountRole = null,
+                        AccountEmail = _configuration["AdminAccount:Email"]
+                    };
+                }
+                else
+                {
+                    throw new AppException(Fail.EXPIRE_TOKEN);
+                }
+            }
+
+            string newAccessToken  = GenerateAccessToken(account);
+            string newRefreshToken = await GenerateRefreshTokenAsync(account);
+
+            return (newAccessToken, newRefreshToken);
         }
     }
 }
