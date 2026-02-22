@@ -56,8 +56,24 @@
 
     <div class="mb-3">
         <label>Tags</label>
-        <select name="TagIds" class="form-select" multiple>
-            @if (ViewBag.Tags != null)
+        <div class="d-flex align-items-center mb-2">
+            <select name="TagIds" id="TagIds" class="form-select me-2" multiple>
+                @if (ViewBag.Tags != null)
+                {
+                    @foreach (var tag in (List<UI.dto.response.TagResponseDto>)ViewBag.Tags)
+                    {
+                        <option value="@tag.TagId">@tag.TagName</option>
+                    }
+                }
+            </select>
+            <button type="button" id="btnSuggestTags" class="btn btn-outline-info text-nowrap">
+                <i class="bi bi-magic"></i> Suggest Tags
+            </button>
+        </div>
+        <div id="suggestedTagsContainer" class="d-flex flex-wrap gap-2 mt-2">
+            <!-- Badges will be injected here -->
+        </div>
+    </div>
             {
                 @foreach (var tag in (List<UI.dto.response.TagResponseDto>)ViewBag.Tags)
                 {
@@ -77,3 +93,74 @@
         </a>
     </div>
 </form>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+    <script>
+        document.getElementById('btnSuggestTags').addEventListener('click', async function () {
+            const content = document.getElementById('NewsContent').value;
+            const container = document.getElementById('suggestedTagsContainer');
+            const btn = document.getElementById('btnSuggestTags');
+
+            if (!content || content.trim().length === 0) {
+                alert("Please enter some News Content first so AI can extract tags.");
+                return;
+            }
+
+            // UI Loading state
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Thinking...';
+            btn.disabled = true;
+            container.innerHTML = '';
+
+            try {
+                const response = await fetch('/AIProxy/SuggestTags', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ content: content })
+                });
+
+                const result = await response.json();
+
+                if (result.success && result.data && result.data.length > 0) {
+                    result.data.forEach(tag => {
+                        const badge = document.createElement('span');
+                        badge.className = 'badge bg-primary text-white p-2" style="cursor: pointer; transition: 0.2s;';
+                        badge.innerHTML = `<i class="bi bi-tag-fill"></i> ${tag.name} <small class="text-white-50">(${(tag.confidence * 100).toFixed(0)}%)</small>`;
+                        
+                        badge.onclick = function () {
+                            // Find the option in the multi-select
+                            const selectObj = document.getElementById('TagIds');
+                            let found = false;
+                            for (let i = 0; i < selectObj.options.length; i++) {
+                                if (selectObj.options[i].text.toLowerCase() === tag.name.toLowerCase()) {
+                                    selectObj.options[i].selected = true;
+                                    found = true;
+                                    break;
+                                }
+                            }
+                            
+                            if (found) {
+                                badge.className = 'badge bg-secondary text-white p-2';
+                                badge.innerHTML = `<i class="bi bi-check-circle-fill"></i> ${tag.name} (Added)`;
+                                badge.onclick = null; // Disable clicking again
+                                badge.style.cursor = 'default';
+                            } else {
+                                alert(`The tag "${tag.name}" does not exist in the system yet. Please create it manually if needed.`);
+                            }
+                        };
+                        container.appendChild(badge);
+                    });
+                } else {
+                    container.innerHTML = `<span class="text-muted small">No tags suggested. Try adding more content.</span>`;
+                }
+            } catch (error) {
+                console.error("AI Tag Suggestion Error", error);
+                alert("An error occurred while communicating with the AI API.");
+            } finally {
+                // Reset UI
+                btn.innerHTML = '<i class="bi bi-magic"></i> Suggest Tags';
+                btn.disabled = false;
+            }
+        });
+    </script>
+}
