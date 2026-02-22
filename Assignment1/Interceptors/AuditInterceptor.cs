@@ -2,6 +2,7 @@ using Assignment1.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.AspNetCore.Http;
+using System.Runtime.CompilerServices;
 using System.Security.Claims;
 using System.Text.Json;
 
@@ -23,10 +24,14 @@ namespace Assignment1.Interceptors
             nameof(SystemAccount)
         };
 
-        private readonly IHttpContextAccessor _httpContextAccessor;
+        // Associates pending audit logs with each DbContext instance (GC-friendly, thread-safe)
+        private static readonly ConditionalWeakTable<DbContext, List<AuditLog>> _pendingTable = new();
 
-        // Per-save snapshot of original values (captured BEFORE SaveChanges writes to DB)
-        private readonly List<AuditLog> _pendingLogs = new();
+        // Re-entrancy flag — prevents audit log saves from triggering a second audit
+        [ThreadStatic]
+        private static bool _isSaving;
+
+        private readonly IHttpContextAccessor _httpContextAccessor;
 
         public AuditInterceptor(IHttpContextAccessor httpContextAccessor)
         {
@@ -40,11 +45,14 @@ namespace Assignment1.Interceptors
             InterceptionResult<int> result,
             CancellationToken cancellationToken = default)
         {
-            _pendingLogs.Clear();
+            if (_isSaving || eventData.Context is not FunewsManagementContext ctx)
+                return base.SavingChangesAsync(eventData, result, cancellationToken);
 
-            if (eventData.Context is not FunewsManagementContext ctx) return base.SavingChangesAsync(eventData, result, cancellationToken);
+            var pending = new List<AuditLog>();
+            _pendingTable.AddOrUpdate(ctx, pending);
 
             short? userId = ResolveUserId();
+            var jsonOpts  = new JsonSerializerOptions { WriteIndented = false };
 
             foreach (var entry in ctx.ChangeTracker.Entries())
             {
@@ -65,29 +73,23 @@ namespace Assignment1.Interceptors
 
                 if (entry.State == EntityState.Modified)
                 {
-                    // Capture original (before) values
-                    var before = entry.Properties
-                        .ToDictionary(p => p.Metadata.Name, p => p.OriginalValue);
-                    beforeJson = JsonSerializer.Serialize(before);
-
-                    var after = entry.Properties
-                        .ToDictionary(p => p.Metadata.Name, p => p.CurrentValue);
-                    afterJson = JsonSerializer.Serialize(after);
+                    beforeJson = JsonSerializer.Serialize(
+                        entry.Properties.ToDictionary(p => p.Metadata.Name, p => p.OriginalValue), jsonOpts);
+                    afterJson = JsonSerializer.Serialize(
+                        entry.Properties.ToDictionary(p => p.Metadata.Name, p => p.CurrentValue), jsonOpts);
                 }
                 else if (entry.State == EntityState.Deleted)
                 {
-                    var before = entry.Properties
-                        .ToDictionary(p => p.Metadata.Name, p => p.OriginalValue);
-                    beforeJson = JsonSerializer.Serialize(before);
+                    beforeJson = JsonSerializer.Serialize(
+                        entry.Properties.ToDictionary(p => p.Metadata.Name, p => p.OriginalValue), jsonOpts);
                 }
-                else if (entry.State == EntityState.Added)
+                else // Added
                 {
-                    var after = entry.Properties
-                        .ToDictionary(p => p.Metadata.Name, p => p.CurrentValue);
-                    afterJson = JsonSerializer.Serialize(after);
+                    afterJson = JsonSerializer.Serialize(
+                        entry.Properties.ToDictionary(p => p.Metadata.Name, p => p.CurrentValue), jsonOpts);
                 }
 
-                _pendingLogs.Add(new AuditLog
+                pending.Add(new AuditLog
                 {
                     Id         = Guid.NewGuid(),
                     UserId     = userId,
@@ -109,15 +111,22 @@ namespace Assignment1.Interceptors
             int result,
             CancellationToken cancellationToken = default)
         {
-            if (_pendingLogs.Count > 0 && eventData.Context is FunewsManagementContext ctx)
+            if (!_isSaving &&
+                eventData.Context is FunewsManagementContext ctx &&
+                _pendingTable.TryGetValue(ctx, out var pending) &&
+                pending.Count > 0)
             {
-                await ctx.AuditLogs.AddRangeAsync(_pendingLogs, cancellationToken);
-
-                // Use the base SaveChangesAsync to avoid re-triggering this interceptor
-                await ctx.Database.GetDbConnection().OpenAsync(cancellationToken);
-                await ctx.SaveChangesAsync(acceptAllChangesOnSuccess: true, cancellationToken: cancellationToken);
-
-                _pendingLogs.Clear();
+                _isSaving = true;
+                try
+                {
+                    await ctx.AuditLogs.AddRangeAsync(pending, cancellationToken);
+                    await ctx.SaveChangesAsync(cancellationToken);
+                }
+                finally
+                {
+                    _isSaving = false;
+                    _pendingTable.Remove(ctx);
+                }
             }
 
             return await base.SavedChangesAsync(eventData, result, cancellationToken);
@@ -128,8 +137,7 @@ namespace Assignment1.Interceptors
         private short? ResolveUserId()
         {
             var claim = _httpContextAccessor.HttpContext?.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            if (short.TryParse(claim, out short id)) return id;
-            return null;
+            return short.TryParse(claim, out short id) ? id : null;
         }
     }
 }
