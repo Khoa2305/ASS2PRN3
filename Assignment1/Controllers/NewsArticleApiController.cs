@@ -10,6 +10,8 @@ using Assignment1.Constant;
 using Assignment1.CustomException;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.SignalR;
+using Assignment1.Hubs;
 
 namespace Assignment1.Controllers
 {
@@ -19,9 +21,12 @@ namespace Assignment1.Controllers
     public class NewsArticleApiController : ControllerBase
     {
         private readonly INewsArticleService _articleService;
-        public NewsArticleApiController(INewsArticleService newsArticleService)
+        private readonly IHubContext<NotificationHub> _hubContext;
+
+        public NewsArticleApiController(INewsArticleService newsArticleService, IHubContext<NotificationHub> hubContext)
         {
             _articleService = newsArticleService;
+            _hubContext = hubContext;
         }
 
         [HttpGet("public")]
@@ -79,6 +84,14 @@ namespace Assignment1.Controllers
             }
 
             var created = _articleService.Add(entity, article.TagIds);
+
+            // SignalR: Broadcast new article notification
+            var msg = new { 
+                Title = entity.NewsTitle, 
+                Author = entity.CreatedBy?.AccountName ?? "Someone", 
+                Time = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") 
+            };
+            _hubContext.Clients.All.SendAsync("ReceiveNotification", msg);
 
             return Created(
                 $"/api/newsarticle",

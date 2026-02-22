@@ -1,4 +1,5 @@
 ﻿using Assignment1.Interceptors;
+using Assignment1.Hubs;
 using Assignment1.Middleware;
 using Assignment1.Models;
 using Assignment1.Repositories.Imp;
@@ -61,11 +62,14 @@ builder.Services.AddCors(options =>
     options.AddPolicy("MyCorsPolicy", policy =>
     {
         policy
-            .AllowAnyOrigin()
+            .SetIsOriginAllowed(_ => true) // Allow any origin
             .AllowAnyHeader()
-            .AllowAnyMethod();
+            .AllowAnyMethod()
+            .AllowCredentials(); // Required for SignalR
     });
 });
+
+builder.Services.AddSignalR();
 
 // ── Repositories ─────────────────────────────────────────────────────────────
 builder.Services.AddScoped<IAccountRepository, AccountRepository>();
@@ -138,6 +142,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+app.MapHub<NotificationHub>("/hubs/notifications");
 
 app.Run();
 
