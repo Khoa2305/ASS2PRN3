@@ -73,16 +73,7 @@
             <!-- Badges will be injected here -->
         </div>
     </div>
-            {
-                @foreach (var tag in (List<UI.dto.response.TagResponseDto>)ViewBag.Tags)
-                {
-                    <option value="@tag.TagId" selected="@(Model.Tags != null && Model.Tags.Contains(tag.TagId))">
-                        @tag.TagName
-                    </option>
-                }
-            }
-        </select>
-    </div>
+
 
     <div class="mb-3">
         <label>Created Date</label>

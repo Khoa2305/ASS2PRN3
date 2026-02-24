@@ -219,54 +219,88 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.0/signalr.min.js"></script>
 <script src="~/js/site.js" asp-append-version="true"></script>
 
-<script>
-    document.addEventListener("DOMContentLoaded", function () {
-        let notifications = [];
-        let unreadCount = 0;
+@if (isLoggedIn)
+{
 
+    <script>
+    document.addEventListener("DOMContentLoaded", function () {
+
+        const accessToken = '@accessToken';
+
+        // ❗ Nếu chưa login thì không kết nối SignalR
+        if (!accessToken) {
+            console.log("No access token - SignalR not started.");
+            return;
+        }
+
+        const storageKey = 'funews_notifications_memory';
+        const unreadKey = 'funews_unread_memory';
+
+        function loadMemory() {
+            try {
+                return JSON.parse(sessionStorage.getItem(storageKey)) || [];
+            } catch { return []; }
+        }
+
+        let notifications = loadMemory();
+        let unreadCount = parseInt(sessionStorage.getItem(unreadKey)) || 0;
+
+        function saveMemory() {
+            sessionStorage.setItem(storageKey, JSON.stringify(notifications));
+            sessionStorage.setItem(unreadKey, unreadCount.toString());
+        }
+
+        // ✅ FIX: gửi accessToken lên Hub
         const connection = new signalR.HubConnectionBuilder()
-            .withUrl("http://localhost:5039/hubs/notifications")
+            .withUrl("http://localhost:5039/hubs/notifications", {
+                accessTokenFactory: () => accessToken
+            })
             .withAutomaticReconnect()
             .build();
 
         connection.on("ReceiveNotification", function (msg) {
-            // Update Array (Keep last 10)
+
             notifications.unshift(msg);
             if (notifications.length > 10) notifications.pop();
+
             unreadCount++;
+            saveMemory();
 
-            // Trigger Toast
             showToast(msg);
-
-            // Update UI
             updateNotificationUI();
         });
 
-        connection.start().catch(function (err) {
-            return console.error(err.toString());
-        });
+        connection.start()
+            .then(() => {
+                console.log("SignalR Connected.");
+                updateNotificationUI();
+            })
+            .catch(function (err) {
+                console.error("SignalR Error:", err.toString());
+            });
 
         function showToast(msg) {
             const toastHtml = `
-                <div class="toast" role="alert" aria-live="assertive" aria-atomic="true" data-bs-delay="4000">
+                <div class="toast" role="alert" data-bs-delay="4000">
                     <div class="toast-header bg-primary text-white">
                         <i class="bi bi-bell-fill me-2"></i>
                         <strong class="me-auto">New Article Published!</strong>
                         <small>${msg.time}</small>
-                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast" aria-label="Close"></button>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast"></button>
                     </div>
                     <div class="toast-body text-dark bg-white">
                         <strong>${msg.title}</strong> by ${msg.author}
                     </div>
                 </div>
             `;
+
             const container = document.getElementById("toastContainer");
             container.insertAdjacentHTML('beforeend', toastHtml);
+
             const toastEl = container.lastElementChild;
             const bsToast = new bootstrap.Toast(toastEl);
             bsToast.show();
 
-            // Auto remove node after hidden
             toastEl.addEventListener('hidden.bs.toast', () => {
                 toastEl.remove();
             });
@@ -275,6 +309,8 @@
         function updateNotificationUI() {
             const badge = document.getElementById("notificationBadge");
             const list = document.getElementById("notificationList");
+
+            if (!badge || !list) return;
 
             if (unreadCount > 0) {
                 badge.style.display = "inline-block";
@@ -289,34 +325,40 @@
                 list.innerHTML = notifications.map(n => `
                     <li>
                         <a class="dropdown-item" href="#">
-                            <div class="fw-bold text-truncate" style="max-width: 250px;">${n.title}</div>
+                            <div class="fw-bold text-truncate" style="max-width:250px;">${n.title}</div>
                             <div class="text-muted small">By ${n.author} - ${n.time}</div>
                         </a>
                     </li>
                     <li><hr class="dropdown-divider"></li>
                 `).join('');
-                
-                // Add mark all read button if any
+
                 if (unreadCount > 0) {
-                    list.innerHTML += '<li><a class="dropdown-item text-center text-primary fw-bold" href="#" id="markAllRead">Mark all as read</a></li>';
-                    document.getElementById("markAllRead").addEventListener("click", function(e) {
+                    list.innerHTML += `
+                        <li>
+                            <a class="dropdown-item text-center text-primary fw-bold" href="#" id="markAllRead">
+                                Mark all as read
+                            </a>
+                        </li>
+                    `;
+
+                    document.getElementById("markAllRead").addEventListener("click", function (e) {
                         e.preventDefault();
-                        e.stopPropagation();
                         unreadCount = 0;
+                        saveMemory();
                         updateNotificationUI();
                     });
                 }
             }
         }
 
-        // Reset badge when opening dropdown
-        document.getElementById("notificationDropdown")?.addEventListener("show.bs.dropdown", function() {
+        document.getElementById("notificationDropdown")?.addEventListener("show.bs.dropdown", function () {
             unreadCount = 0;
+            saveMemory();
             updateNotificationUI();
         });
     });
-</script>
-
+    </script>
+}
     @await RenderSectionAsync("Scripts", required: false)
 
 </body>

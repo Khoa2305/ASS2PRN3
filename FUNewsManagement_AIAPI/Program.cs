@@ -1,10 +1,16 @@
+using Assignment1.Models;
 using FUNewsManagement_AIAPI.Services;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Services.AddControllers();
+
+builder.Services.AddDbContext<FunewsManagementContext>(options =>
+    options.UseSqlServer(builder.Configuration.GetConnectionString("MyCnn")));
+
 builder.Services.AddScoped<IAIService, AIService>();
 
 // Swagger

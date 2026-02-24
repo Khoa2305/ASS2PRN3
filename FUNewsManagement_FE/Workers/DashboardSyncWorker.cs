@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using FUNewsManagement_FE.Clients;
 using FUNewsManagement_FE.Services;
 using UI.dto.response;
@@ -50,37 +50,45 @@ namespace FUNewsManagement_FE.Workers
             {
                 _logger.LogInformation("DashboardSyncWorker checking for fresh analytics data...");
 
-                // Create a scope to resolve scoped/transient services like typed HttpClients
                 using var scope = _serviceProvider.CreateScope();
                 var analyticsApi = scope.ServiceProvider.GetRequiredService<IAnalyticsApiClient>();
 
-                // Assuming the Analytics API has a public GET /api/analytics/dashboard endpoint 
-                // Alternatively this might require an admin token. We will try to fetch it.
                 var response = await analyticsApi.SendAndDeserializeAsync<ApiResponse<DashboardDto>>(
-                    HttpMethod.Get, 
+                    HttpMethod.Get,
                     "api/analytics/dashboard");
 
                 if (response != null && response.Success && response.Data != null)
                 {
-                    _logger.LogInformation("Successfully fetched analytics dashboard. Updating cache.");
-                    
-                    // 1. Update Memory
+                    _logger.LogInformation("Successfully fetched analytics dashboard.");
+
                     _offlineState.CachedDashboard = response.Data;
                     _offlineState.IsOffline = false;
 
-                    // 2. Save to Disk
                     await SaveCacheToDiskAsync(response.Data);
                 }
                 else
                 {
-                    _logger.LogWarning("Failed to fetch analytics dashboard (Unsuccessful API response). Going offline.");
-                    _offlineState.IsOffline = true;
+                    // API trả về nhưng không thành công
+                    // KHÔNG đánh dấu offline
+                    _logger.LogWarning("API responded but unsuccessful. Not marking offline.");
                 }
+            }
+            catch (HttpRequestException ex)
+            {
+                // Chỉ network error mới đánh dấu offline
+                _logger.LogError(ex, "Network error. Backend may be down.");
+                _offlineState.IsOffline = true;
+            }
+            catch (TaskCanceledException ex)
+            {
+                // Timeout cũng tính là network issue
+                _logger.LogError(ex, "Request timeout. Going offline.");
+                _offlineState.IsOffline = true;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Exception while fetching analytics dashboard. Going offline.");
-                _offlineState.IsOffline = true;
+                // Lỗi logic khác → không phải backend chết
+                _logger.LogWarning(ex, "Unexpected error but not marking offline.");
             }
         }
 

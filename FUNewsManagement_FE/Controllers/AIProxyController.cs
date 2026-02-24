@@ -1,7 +1,7 @@
-using FUNewsManagement_FE.Clients;
+﻿using FUNewsManagement_FE.Clients;
 using FUNewsManagement_FE.dto.request;
-using FUNewsManagement_FE.dto.response;
 using Microsoft.AspNetCore.Mvc;
+using UI.dto.response;
 
 namespace FUNewsManagement_FE.Controllers
 {
@@ -19,20 +19,30 @@ namespace FUNewsManagement_FE.Controllers
         public async Task<IActionResult> SuggestTags([FromBody] SuggestTagsRequest request)
         {
             if (string.IsNullOrWhiteSpace(request.Content))
-            {
                 return BadRequest("Content is required for tag suggestion.");
-            }
 
             try
             {
-                var response = await _aiClient.SendAndDeserializeAsync<SuggestTagsResponse>(HttpMethod.Post, "api/ai/suggest-tags", request);
-                
-                if (response != null && response.SuggestedTags != null)
+                // AIAPI trả về List<TagResponseDto> (array JSON)
+                var tags = await _aiClient
+                    .SendAndDeserializeAsync<List<TagResponseDto>>(
+                        HttpMethod.Post,
+                        "api/ai/suggest-tags",
+                        request);
+
+                if (tags != null && tags.Any())
                 {
-                    return Json(new { success = true, data = response.SuggestedTags });
+                    // AIService lưu confidence*100 vào NumberArticle
+                    var data = tags.Select(t => new
+                    {
+                        name       = t.TagName ?? string.Empty,
+                        confidence = Math.Round(t.NumberArticle / 100.0, 2)
+                    });
+
+                    return Json(new { success = true, data });
                 }
 
-                return Json(new { success = false, message = "No suggestions returned from AI." });
+                return Json(new { success = false, message = "No tags matched the content." });
             }
             catch (Exception ex)
             {

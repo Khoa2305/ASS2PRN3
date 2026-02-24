@@ -15,7 +15,6 @@ namespace Assignment1.Middleware
         }
         public async Task InvokeAsync(HttpContext context, IAuthenticationService _authService)
         {
-            // 1. Check for [AllowAnonymous] metadata
             var endpoint = context.GetEndpoint();
             if (endpoint?.Metadata?.GetMetadata<IAllowAnonymous>() != null)
             {
@@ -23,39 +22,44 @@ namespace Assignment1.Middleware
                 return;
             }
 
-            // 2. Fallback for paths that might not have endpoint metadata (Swagger, static files, etc.)
             var excludedPaths = new[]
             {
-                "/api/auth/login",
-                "/api/newsarticles/public",
-                "/swagger",
-                "/favicon.ico"
-            };
+        "/api/auth/login",
+        "/api/newsarticles/public",
+        "/swagger",
+        "/favicon.ico"
+    };
 
             if (excludedPaths.Any(p => context.Request.Path.StartsWithSegments(p, StringComparison.OrdinalIgnoreCase)))
             {
                 await _next(context);
                 return;
             }
-            string accessToken;
-            try
+
+            string? accessToken = null;
+
+            // 🔥 1. Try header first
+            var authHeader = context.Request.Headers["Authorization"].FirstOrDefault();
+            if (!string.IsNullOrEmpty(authHeader) && authHeader.StartsWith("Bearer "))
             {
-                accessToken = context.Request.Headers["Authorization"].ToString()?.Substring(7);
+                accessToken = authHeader.Substring("Bearer ".Length);
             }
-            catch
+
+            // 🔥 2. If not found → try SignalR query
+            if (string.IsNullOrEmpty(accessToken))
             {
-                accessToken = null;
+                accessToken = context.Request.Query["access_token"];
             }
-            if (!string.IsNullOrEmpty(accessToken) && _authService.IsValidAccessToken(accessToken, out ClaimsPrincipal claims))
+
+            if (!string.IsNullOrEmpty(accessToken) &&
+                _authService.IsValidAccessToken(accessToken, out ClaimsPrincipal claims))
             {
                 context.User = claims;
                 await _next(context);
                 return;
             }
-            else
-            {
-                throw new AppException(Fail.EXPIRE_TOKEN);
-            }
+
+            throw new AppException(Fail.EXPIRE_TOKEN);
         }
     }
 }
